@@ -1,0 +1,6 @@
+{
+  "name": "StealthVPN",
+  "description": "An Android 16 VPN featuring AES-256 encryption, dynamic packet obfuscation, and active 1-second IP shuffling for absolute privacy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

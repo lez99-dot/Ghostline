@@ -1,0 +1,1443 @@
+package com.example
+
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.net.VpnService
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.theme.*
+import java.util.Locale
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen(viewModel: VpnViewModel) {
+    val context = LocalContext.current
+    var selectedTab by remember { mutableStateOf(0) }
+
+    val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
+    val isIpRotationEnabled by viewModel.isIpRotationEnabled.collectAsStateWithLifecycle()
+    val currentIp by viewModel.currentIp.collectAsStateWithLifecycle()
+
+    // Activity launcher for system VPN permission
+    val vpnPrepareLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.toggleVpn(vpnPrepared = true)
+        } else {
+            viewModel.addTerminalLog("SYSTEM: VPN permission rejected by user.")
+        }
+    }
+
+    fun handleVpnToggle() {
+        val intent = VpnService.prepare(context)
+        if (intent != null) {
+            vpnPrepareLauncher.launch(intent)
+        } else {
+            viewModel.toggleVpn(vpnPrepared = true)
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = CyberBlack,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            tint = CyberEmerald,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "STEALTH_VPN",
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 20.sp,
+                            color = CyberWhite,
+                            letterSpacing = 2.sp
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = CyberBlack,
+                    titleContentColor = CyberWhite
+                ),
+                actions = {
+                    IconButton(
+                        onClick = { viewModel.clearLogs() },
+                        modifier = Modifier.testTag("clear_logs_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = "Clear logs",
+                            tint = CyberGray
+                        )
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            NavigationBar(
+                containerColor = CyberCard,
+                tonalElevation = 8.dp
+            ) {
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = { Icon(Icons.Default.Security, contentDescription = "Tunnel") },
+                    label = { Text("Shield", fontFamily = FontFamily.Monospace, fontSize = 10.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = CyberBlack,
+                        selectedTextColor = CyberEmerald,
+                        indicatorColor = CyberEmerald,
+                        unselectedIconColor = CyberGray,
+                        unselectedTextColor = CyberGray
+                    )
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { Icon(Icons.Default.Shuffle, contentDescription = "Rotator") },
+                    label = { Text("IP Rotate", fontFamily = FontFamily.Monospace, fontSize = 10.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = CyberBlack,
+                        selectedTextColor = CyberEmerald,
+                        indicatorColor = CyberEmerald,
+                        unselectedIconColor = CyberGray,
+                        unselectedTextColor = CyberGray
+                    )
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = { Icon(Icons.Default.Lock, contentDescription = "Crypto") },
+                    label = { Text("AES-256", fontFamily = FontFamily.Monospace, fontSize = 10.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = CyberBlack,
+                        selectedTextColor = CyberEmerald,
+                        indicatorColor = CyberEmerald,
+                        unselectedIconColor = CyberGray,
+                        unselectedTextColor = CyberGray
+                    )
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    icon = { Icon(Icons.Default.Public, contentDescription = "Relays") },
+                    label = { Text("Relays", fontFamily = FontFamily.Monospace, fontSize = 10.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = CyberBlack,
+                        selectedTextColor = CyberEmerald,
+                        indicatorColor = CyberEmerald,
+                        unselectedIconColor = CyberGray,
+                        unselectedTextColor = CyberGray
+                    )
+                )
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(CyberBlack)
+        ) {
+            // Main Connection status bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(CyberCard)
+                    .padding(vertical = 12.dp, horizontal = 16.dp)
+                    .border(1.dp, Brush.linearGradient(listOf(CyberEmerald.copy(alpha = 0.3f), Color.Transparent)), RoundedCornerShape(0.dp))
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when (connectionState) {
+                                        ConnectionState.CONNECTED -> CyberEmerald
+                                        ConnectionState.CONNECTING -> CyberCyan
+                                        ConnectionState.SHUFFLING -> CyberCyan
+                                        ConnectionState.DISCONNECTED -> CyberRed
+                                    }
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = when (connectionState) {
+                                ConnectionState.CONNECTED -> "SECURE STEALTH TUNNEL ACTIVE"
+                                ConnectionState.CONNECTING -> "NEGOTIATING HANDSHAKE..."
+                                ConnectionState.SHUFFLING -> "ROTATING EXIT NODE..."
+                                ConnectionState.DISCONNECTED -> "TUNNEL OFFLINE (UNPROTECTED)"
+                            },
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = when (connectionState) {
+                                ConnectionState.CONNECTED -> CyberEmerald
+                                ConnectionState.CONNECTING -> CyberCyan
+                                ConnectionState.SHUFFLING -> CyberCyan
+                                ConnectionState.DISCONNECTED -> CyberRed
+                            }
+                        )
+                    }
+                    if (isIpRotationEnabled) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(CyberEmerald.copy(alpha = 0.15f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "ROTATOR_ON",
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = CyberEmerald,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Split pane: Top is active tab screen, Bottom is terminal log
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                when (selectedTab) {
+                    0 -> DashboardTab(viewModel, ::handleVpnToggle)
+                    1 -> RotatorTab(viewModel)
+                    2 -> CryptoTab(viewModel)
+                    3 -> RelaysTab(viewModel)
+                }
+            }
+
+            // Real-time terminal output
+            TerminalConsole(viewModel)
+        }
+    }
+}
+
+@Composable
+fun DashboardTab(viewModel: VpnViewModel, onToggleVpn: () -> Unit) {
+    val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
+    val selectedServer by viewModel.selectedServer.collectAsStateWithLifecycle()
+    val currentIp by viewModel.currentIp.collectAsStateWithLifecycle()
+    val downloadSpeed by viewModel.downloadSpeed.collectAsStateWithLifecycle()
+    val uploadSpeed by viewModel.uploadSpeed.collectAsStateWithLifecycle()
+    val isSingleIpMode by viewModel.isSingleIpMode.collectAsStateWithLifecycle()
+    val isIpRotationEnabled by viewModel.isIpRotationEnabled.collectAsStateWithLifecycle()
+
+    // Animating circle pulse
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+
+    val radarRotate by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = LinearEasing)
+        ),
+        label = "rotate"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Glowing Connection Circle Button
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(230.dp)
+                .padding(12.dp)
+        ) {
+            // Pulse rings
+            if (connectionState == ConnectionState.CONNECTED || connectionState == ConnectionState.SHUFFLING) {
+                Box(
+                    modifier = Modifier
+                        .size(190.dp)
+                        .rotate(radarRotate)
+                        .drawBehind {
+                            drawCircle(
+                                color = CyberEmerald.copy(alpha = 0.08f),
+                                radius = size.minDimension / 2 * pulseScale
+                            )
+                            drawCircle(
+                                color = CyberEmerald,
+                                radius = size.minDimension / 2,
+                                style = Stroke(
+                                    width = 1.dp.toPx(),
+                                    cap = StrokeCap.Round,
+                                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(15f, 45f), 0f)
+                                )
+                            )
+                        }
+                )
+            }
+
+            // Core circle
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(150.dp)
+                    .shadow(
+                        elevation = 16.dp,
+                        shape = CircleShape,
+                        ambientColor = if (connectionState == ConnectionState.CONNECTED) CyberEmerald else CyberRed,
+                        spotColor = if (connectionState == ConnectionState.CONNECTED) CyberEmerald else CyberRed
+                    )
+                    .clip(CircleShape)
+                    .background(CyberCard)
+                    .border(
+                        2.dp,
+                        Brush.linearGradient(
+                            listOf(
+                                if (connectionState == ConnectionState.CONNECTED) CyberEmerald else CyberRed,
+                                CyberCyan
+                            )
+                        ),
+                        CircleShape
+                    )
+                    .clickable { onToggleVpn() }
+                    .testTag("connect_button")
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = "Power",
+                        tint = if (connectionState == ConnectionState.CONNECTED) CyberEmerald else CyberRed,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = when (connectionState) {
+                            ConnectionState.CONNECTED -> "SECURE"
+                            ConnectionState.CONNECTING -> "WAIT..."
+                            ConnectionState.SHUFFLING -> "SHUFFLE"
+                            ConnectionState.DISCONNECTED -> "SECURE"
+                        },
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp,
+                        color = if (connectionState == ConnectionState.CONNECTED) CyberEmerald else CyberWhite
+                    )
+                }
+            }
+        }
+
+        // IP Display Banner
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.15f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "VIRTUAL CLOAKED IP",
+                    color = CyberGray,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Public,
+                        contentDescription = null,
+                        tint = CyberEmerald,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = currentIp,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = CyberWhite,
+                        letterSpacing = 1.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "AES-256 Obfuscated Layer Active",
+                    color = CyberEmerald.copy(alpha = 0.7f),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp
+                )
+            }
+        }
+
+        // Real-time speed metrics
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.1f)),
+                modifier = Modifier.weight(1f)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowDownward,
+                            contentDescription = "DL",
+                            tint = CyberEmerald,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "DOWNSTREAM",
+                            fontSize = 9.sp,
+                            color = CyberGray,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = String.format(Locale.US, "%.2f MB/s", downloadSpeed),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = CyberWhite
+                    )
+                }
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.1f)),
+                modifier = Modifier.weight(1f)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowUpward,
+                            contentDescription = "UL",
+                            tint = CyberCyan,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "UPSTREAM",
+                            fontSize = 9.sp,
+                            color = CyberGray,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = String.format(Locale.US, "%.2f MB/s", uploadSpeed),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = CyberWhite
+                    )
+                }
+            }
+        }
+
+        // Active node description card
+        selectedServer?.let { server ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCard),
+                border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.15f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "CURRENT ENCRYPTED GATEWAY",
+                        color = CyberCyan,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = server.countryLong,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CyberWhite
+                            )
+                            Text(
+                                text = server.hostName,
+                                fontSize = 11.sp,
+                                color = CyberGray,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.width(220.dp)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(CyberCyan.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "${server.ping} ms",
+                                color = CyberCyan,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Tunnel Operation Mode Selector Card
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.2f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "CONNECTION ROUTING MODE",
+                    color = CyberEmerald,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isSingleIpMode) "Static Single IP Tunnel" else "Dynamic IP Rotator",
+                            color = CyberWhite,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (isSingleIpMode) 
+                                "Routing traffic stably via a single static VPN gateway IP. Safest for online banking & gaming." 
+                            else 
+                                "IP rotating automatically to bypass tracking. Perfect for high-grade anonymity.",
+                            color = CyberGray,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Switch(
+                        checked = isSingleIpMode,
+                        onCheckedChange = { viewModel.toggleSingleIpMode() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = CyberBlack,
+                            checkedTrackColor = CyberEmerald,
+                            uncheckedThumbColor = CyberBlack,
+                            uncheckedTrackColor = CyberCyan
+                        ),
+                        modifier = Modifier.testTag("single_ip_connection_switch")
+                    )
+                }
+            }
+        }
+
+        // WiFi Router & ISP Cloaking Shield Card
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.15f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = CyberCyan,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "WIFI & ISP CLOAKING SHIELD",
+                        color = CyberCyan,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = null,
+                            tint = CyberEmerald,
+                            modifier = Modifier.size(16.dp).padding(top = 2.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "DNS Query Hijack Protection",
+                                color = CyberWhite,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "Upstream DNS requests (Cloudflare 1.1.1.1 & Quad9 9.9.9.9) are routed inside the TLS-encrypted VPN block. Your router/ISP only sees encrypted payloads, keeping your search history 100% private.",
+                                color = CyberGray,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            imageVector = Icons.Default.Public,
+                            contentDescription = null,
+                            tint = CyberEmerald,
+                            modifier = Modifier.size(16.dp).padding(top = 2.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "IPv6 Back-Channel Leak Prevention",
+                                color = CyberWhite,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "Blocks stealth background data leaks on local IPv6 configurations by forcing all IPv6 traffic into the VPN tunnel's virtual null route (::/0).",
+                                color = CyberGray,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = CyberEmerald,
+                            modifier = Modifier.size(16.dp).padding(top = 2.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Packet Size Padding & Obfuscation",
+                                color = CyberWhite,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "Limits MTU to 1400 and pads headers dynamically. This scrambles your data footprint, preventing deep packet inspection and side-channel traffic size/pattern matching.",
+                                color = CyberGray,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RotatorTab(viewModel: VpnViewModel) {
+    val isIpRotationEnabled by viewModel.isIpRotationEnabled.collectAsStateWithLifecycle()
+    val rotationInterval by viewModel.rotationInterval.collectAsStateWithLifecycle()
+    val terminalLogs by viewModel.terminalLogs.collectAsStateWithLifecycle()
+    val isManualHostsEnabled by viewModel.isManualHostsEnabled.collectAsStateWithLifecycle()
+    val manualHostsInput by viewModel.manualHostsInput.collectAsStateWithLifecycle()
+
+    val intervals = listOf(1, 5, 10, 30, 60)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.2f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "IP AUTO-SHUFFLE ENGINE",
+                            color = CyberEmerald,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Rotates gateway IP dynamically at chosen intervals using AES keys to bypass deep packet inspection.",
+                            color = CyberGray,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = isIpRotationEnabled,
+                        onCheckedChange = { viewModel.toggleIpRotation() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = CyberBlack,
+                            checkedTrackColor = CyberEmerald,
+                            uncheckedThumbColor = CyberGray,
+                            uncheckedTrackColor = CyberCard
+                        ),
+                        modifier = Modifier.testTag("ip_rotation_toggle")
+                    )
+                }
+            }
+        }
+
+        // Selection of rotation intervals
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.15f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "SHUFFLE FREQUENCY INTERVAL",
+                    color = CyberCyan,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    intervals.forEach { sec ->
+                        val isSelected = rotationInterval == sec
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 4.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) CyberEmerald else CyberCard)
+                                .border(
+                                    1.dp,
+                                    if (isSelected) CyberEmerald else CyberGray.copy(alpha = 0.3f),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .clickable { viewModel.setRotationInterval(sec) }
+                                .padding(vertical = 8.dp)
+                                .testTag("interval_$sec")
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "${sec}s",
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 14.sp,
+                                    color = if (isSelected) CyberBlack else CyberWhite
+                                )
+                                if (sec == 1) {
+                                    Text(
+                                        "HYPER",
+                                        fontSize = 7.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = if (isSelected) CyberBlack else CyberCyan,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Optional feature: Manual hosts input
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.15f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "MANUAL HOSTS LIST (OPTIONAL)",
+                            color = CyberEmerald,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Provide custom IP addresses or server hostnames (comma-separated) to shuffle between.",
+                            color = CyberGray,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = isManualHostsEnabled,
+                        onCheckedChange = { viewModel.toggleManualHosts() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = CyberBlack,
+                            checkedTrackColor = CyberEmerald,
+                            uncheckedThumbColor = CyberGray,
+                            uncheckedTrackColor = CyberCard
+                        ),
+                        modifier = Modifier.testTag("manual_hosts_toggle")
+                    )
+                }
+
+                if (isManualHostsEnabled) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = manualHostsInput,
+                        onValueChange = { viewModel.manualHostsInput.value = it },
+                        placeholder = { Text("e.g. 1.1.1.1, 8.8.8.8, my.custom.vpn", color = CyberGray) },
+                        textStyle = androidx.compose.ui.text.TextStyle(color = CyberWhite, fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CyberEmerald,
+                            unfocusedBorderColor = CyberGray.copy(alpha = 0.3f),
+                            focusedTextColor = CyberWhite,
+                            unfocusedTextColor = CyberWhite
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("manual_hosts_field")
+                    )
+                }
+            }
+        }
+
+        // IP History / Rotation Log Sub-Terminal
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberGray.copy(alpha = 0.1f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "ACTIVE SHUFFLE LOG",
+                    color = CyberWhite,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    val shuffles = terminalLogs.filter { it.contains("STEALTH-ROTATOR") || it.contains("ROTATOR") }
+                    if (shuffles.isEmpty()) {
+                        Text(
+                            "No rotative handshakes recorded yet.\nToggle the Switch and select a fast interval to witness dynamic IP shuffling.",
+                            color = CyberGray,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 40.dp)
+                        )
+                    } else {
+                        shuffles.forEach { log ->
+                            Text(
+                                text = log,
+                                color = CyberEmerald,
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CryptoTab(viewModel: VpnViewModel) {
+    val encryptInput by viewModel.encryptInput.collectAsStateWithLifecycle()
+    val encryptKey by viewModel.encryptKey.collectAsStateWithLifecycle()
+    val encryptResult by viewModel.encryptResult.collectAsStateWithLifecycle()
+
+    val decryptInput by viewModel.decryptInput.collectAsStateWithLifecycle()
+    val decryptKey by viewModel.decryptKey.collectAsStateWithLifecycle()
+    val decryptIv by viewModel.decryptIv.collectAsStateWithLifecycle()
+    val decryptResult by viewModel.decryptResult.collectAsStateWithLifecycle()
+
+    val clipboardManager = LocalClipboardManager.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = "AES-256 MILITARY-GRADE CRYPTO LAB",
+            color = CyberEmerald,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 1.sp
+        )
+        Text(
+            text = "StealthVPN routes packets after wrapping them inside custom AES-256 encrypted payload blocks. Use this interface to test real cryptographical processing directly on the device.",
+            color = CyberGray,
+            fontSize = 11.sp
+        )
+
+        // Encryption Panel
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.15f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "ENCRYPT PAYLOAD (PLAIN -> CIPHER)",
+                    color = CyberEmerald,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                
+                OutlinedTextField(
+                    value = encryptInput,
+                    onValueChange = { viewModel.encryptInput.value = it },
+                    label = { Text("Plaintext Message") },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, color = CyberWhite),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyberEmerald,
+                        unfocusedBorderColor = CyberGray.copy(alpha = 0.5f),
+                        focusedLabelColor = CyberEmerald,
+                        unfocusedLabelColor = CyberGray,
+                        focusedTextColor = CyberWhite,
+                        unfocusedTextColor = CyberWhite
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("encrypt_input_field")
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = encryptKey,
+                    onValueChange = { viewModel.encryptKey.value = it },
+                    label = { Text("AES-256 Password/Key") },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, color = CyberWhite),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyberEmerald,
+                        unfocusedBorderColor = CyberGray.copy(alpha = 0.5f),
+                        focusedLabelColor = CyberEmerald,
+                        unfocusedLabelColor = CyberGray,
+                        focusedTextColor = CyberWhite,
+                        unfocusedTextColor = CyberWhite
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("encrypt_key_field")
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = { viewModel.runEncryption() },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyberEmerald),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("encrypt_button_action")
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = CyberBlack)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("RUN AES-256 ENCRYPTION", color = CyberBlack, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                }
+
+                if (encryptResult.first.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("ENCRYPTED BASE64 BLOCK:", color = CyberGray, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(CyberBlack)
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = encryptResult.first,
+                            color = CyberCyan,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { clipboardManager.setText(AnnotatedString(encryptResult.first)) }) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = CyberEmerald, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Decryption Panel
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.15f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "DECRYPT PAYLOAD (CIPHER -> PLAIN)",
+                    color = CyberCyan,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                
+                OutlinedTextField(
+                    value = decryptInput,
+                    onValueChange = { viewModel.decryptInput.value = it },
+                    label = { Text("Base64 Ciphertext Block") },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, color = CyberWhite),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyberCyan,
+                        unfocusedBorderColor = CyberGray.copy(alpha = 0.5f),
+                        focusedLabelColor = CyberCyan,
+                        unfocusedLabelColor = CyberGray,
+                        focusedTextColor = CyberWhite,
+                        unfocusedTextColor = CyberWhite
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("decrypt_input_field")
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = decryptIv,
+                    onValueChange = { viewModel.decryptIv.value = it },
+                    label = { Text("Initialization Vector (IV Base64)") },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, color = CyberWhite),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyberCyan,
+                        unfocusedBorderColor = CyberGray.copy(alpha = 0.5f),
+                        focusedLabelColor = CyberCyan,
+                        unfocusedLabelColor = CyberGray,
+                        focusedTextColor = CyberWhite,
+                        unfocusedTextColor = CyberWhite
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("decrypt_iv_field")
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = decryptKey,
+                    onValueChange = { viewModel.decryptKey.value = it },
+                    label = { Text("AES-256 Password/Key") },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, color = CyberWhite),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyberCyan,
+                        unfocusedBorderColor = CyberGray.copy(alpha = 0.5f),
+                        focusedLabelColor = CyberCyan,
+                        unfocusedLabelColor = CyberGray,
+                        focusedTextColor = CyberWhite,
+                        unfocusedTextColor = CyberWhite
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("decrypt_key_field")
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = { viewModel.runDecryption() },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("decrypt_button_action")
+                ) {
+                    Icon(Icons.Default.LockOpen, contentDescription = null, tint = CyberBlack)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("RUN AES-256 DECRYPTION", color = CyberBlack, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                }
+
+                if (decryptResult.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("DECRYPTED RAW TEXT:", color = CyberGray, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(CyberBlack)
+                            .padding(10.dp)
+                    ) {
+                        Text(
+                            text = decryptResult,
+                            color = CyberEmerald,
+                            fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RelaysTab(viewModel: VpnViewModel) {
+    val servers by viewModel.servers.collectAsStateWithLifecycle()
+    val selectedServer by viewModel.selectedServer.collectAsStateWithLifecycle()
+    val isSearching by viewModel.isSearching.collectAsStateWithLifecycle()
+    var query by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "PUBLIC STEALTH RELAYS",
+                    color = CyberWhite,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${servers.size} available routes active",
+                    color = CyberGray,
+                    fontSize = 11.sp
+                )
+            }
+            IconButton(
+                onClick = { viewModel.loadServers() },
+                modifier = Modifier
+                    .background(CyberCard, CircleShape)
+                    .testTag("refresh_servers_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Refresh",
+                    tint = CyberEmerald
+                )
+            }
+        }
+
+        // Search Outlined Box
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = { Text("Filter country (e.g. US, Japan)", color = CyberGray) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = CyberGray) },
+            textStyle = androidx.compose.ui.text.TextStyle(color = CyberWhite, fontFamily = FontFamily.Monospace),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = CyberEmerald,
+                unfocusedBorderColor = CyberCard,
+                focusedTextColor = CyberWhite,
+                unfocusedTextColor = CyberWhite
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("search_field")
+        )
+
+        val filtered = servers.filter {
+            it.countryLong.contains(query, ignoreCase = true) ||
+            it.countryShort.contains(query, ignoreCase = true)
+        }
+
+        if (isSearching) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = CyberEmerald)
+            }
+        } else if (filtered.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "No relays found matching \"$query\"",
+                    color = CyberGray,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp
+                )
+            }
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(filtered) { server ->
+                    val isSelected = selectedServer?.ip == server.ip
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) CyberCard else CyberCard.copy(alpha = 0.5f)
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) CyberEmerald else Color.Transparent
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.selectServer(server) }
+                            .testTag("server_item_${server.ip}")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(CyberEmerald.copy(alpha = 0.15f))
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = server.countryShort,
+                                            fontSize = 9.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.Bold,
+                                            color = CyberEmerald
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = server.countryLong,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = CyberWhite
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "IP: ${server.ip} • Host: ${server.hostName}",
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = CyberGray,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "${server.ping} ms",
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when {
+                                        server.ping < 50 -> CyberEmerald
+                                        server.ping < 150 -> CyberCyan
+                                        else -> CyberGray
+                                    }
+                                )
+                                Text(
+                                    text = String.format(Locale.US, "%.1f Mbps", server.speed / 1000000f),
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = CyberGray
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TerminalConsole(viewModel: VpnViewModel) {
+    val logs by viewModel.terminalLogs.collectAsStateWithLifecycle()
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF030508)),
+        border = BorderStroke(1.dp, CyberEmerald.copy(alpha = 0.2f)),
+        shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(130.dp)
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Terminal,
+                        contentDescription = null,
+                        tint = CyberEmerald,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "SECURE_TUNNEL_CONSOLE",
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = CyberWhite
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(CyberEmerald)
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Divider(color = CyberEmerald.copy(alpha = 0.15f), modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(4.dp))
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(logs) { log ->
+                    Text(
+                        text = log,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp,
+                        color = when {
+                            log.contains("ERROR") -> CyberRed
+                            log.contains("STEALTH") -> CyberEmerald
+                            log.contains("AES") -> CyberCyan
+                            else -> CyberGray
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}
