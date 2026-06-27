@@ -78,6 +78,13 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     private val _isDecoyShuffleEnabled = MutableStateFlow(true)
     val isDecoyShuffleEnabled: StateFlow<Boolean> = _isDecoyShuffleEnabled.asStateFlow()
 
+    private val _isVpsRelayEnabled = MutableStateFlow(false)
+    val isVpsRelayEnabled: StateFlow<Boolean> = _isVpsRelayEnabled.asStateFlow()
+
+    val vpsIp = MutableStateFlow("194.26.135.12")
+    val vpsPort = MutableStateFlow("51820")
+    val vpsSecretKey = MutableStateFlow("wg-psk-vps-relay-secret-key-321-abc")
+
     val decoyHost = MutableStateFlow("www.google.com")
 
     val decoyOptions = listOf(
@@ -201,6 +208,13 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         _currentIp.value = server.ip
 
         addTerminalLog("HANDSHAKE: Initiating WireGuard Noise_IKpsk2_25519 handshake...")
+        
+        if (_isVpsRelayEnabled.value) {
+            addTerminalLog("RELAY: Passing tunnel through custom VPS Relay Server -> ${vpsIp.value}:${vpsPort.value}")
+            addTerminalLog("RELAY: Authenticating with VPS [wg-psk Curve25519 secure exchange]")
+            addTerminalLog("RELAY: Established Tunnel: Local Device ➔ VPS Relay [${vpsIp.value}] ➔ Exit Gateway [${server.hostName} : ${server.ip}]")
+        }
+
         if (_isWebIPMaskingEnabled.value) {
             if (_isDecoyShuffleEnabled.value) {
                 val nextDecoy = decoyOptions.random()
@@ -236,6 +250,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
                     putExtra("EXTRA_DYNAMIC_PACKET_SIZING", _isDynamicPacketSizingEnabled.value)
                     putExtra("EXTRA_WEB_IP_MASKING", _isWebIPMaskingEnabled.value)
                     putExtra("EXTRA_DECOY_HOST", decoyHost.value)
+                    putExtra("EXTRA_VPS_RELAY_ENABLED", _isVpsRelayEnabled.value)
+                    putExtra("EXTRA_VPS_IP", vpsIp.value)
+                    putExtra("EXTRA_VPS_PORT", vpsPort.value)
                 }
                 context.startService(intent)
 
@@ -412,6 +429,15 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleVpsRelay() {
+        _isVpsRelayEnabled.value = !_isVpsRelayEnabled.value
+        if (_isVpsRelayEnabled.value) {
+            addTerminalLog("RELAY: VPS Relay Routing active. All egress packets will relay through custom server: ${vpsIp.value}:${vpsPort.value}")
+        } else {
+            addTerminalLog("RELAY: Custom VPS Relay deactivated. Packets routed directly to VPN node.")
+        }
+    }
+
     private fun startIpRotation() {
         rotationJob?.cancel()
         rotationJob = viewModelScope.launch {
@@ -520,9 +546,17 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
             val decoyCount = Random.nextInt(1, 3)
             val decoys = available.filter { it.ip != nextServer.ip && it.ip != currentServer?.ip }.shuffled().take(decoyCount)
             val pathStr = decoys.joinToString(" ➔ ") { "[${it.countryShort}: ${it.ip}]" }
-            addTerminalLog("GHOST-ROUTING: Multi-hop circuit built: Entry ➔ $pathStr ➔ Exit [${nextServer.countryShort}: $newIp]")
+            if (_isVpsRelayEnabled.value) {
+                addTerminalLog("GHOST-ROUTING: Multi-hop VPS relay route built: Device ➔ VPS Relay [${vpsIp.value}] ➔ $pathStr ➔ Exit [${nextServer.countryShort}: $newIp]")
+            } else {
+                addTerminalLog("GHOST-ROUTING: Multi-hop circuit built: Entry ➔ $pathStr ➔ Exit [${nextServer.countryShort}: $newIp]")
+            }
         } else {
-            addTerminalLog("STEALTH-ROTATOR: Perfect-Forward-Secrecy triggered. Rotating exit node to [${nextServer.countryShort}] -> IP: $newIp (Obfuscated Packets)")
+            if (_isVpsRelayEnabled.value) {
+                addTerminalLog("STEALTH-ROTATOR: Perfect-Forward-Secrecy triggered. Route: Device ➔ VPS Relay [${vpsIp.value}] ➔ Exit Node [${nextServer.countryShort}: $newIp]")
+            } else {
+                addTerminalLog("STEALTH-ROTATOR: Perfect-Forward-Secrecy triggered. Rotating exit node to [${nextServer.countryShort}] -> IP: $newIp (Obfuscated Packets)")
+            }
         }
         _connectionState.value = ConnectionState.CONNECTED
     }

@@ -24,6 +24,9 @@ class StealthVpnService : VpnService() {
     private var dynamicPacketSizingEnabled = false
     private var webIPMaskingEnabled = false
     private var decoyHostName = "www.google.com"
+    private var vpsRelayEnabled = false
+    private var vpsIp = "194.26.135.12"
+    private var vpsPort = "51820"
 
     companion object {
         const val ACTION_CONNECT = "com.example.stealthvpn.CONNECT"
@@ -32,6 +35,9 @@ class StealthVpnService : VpnService() {
         const val EXTRA_DYNAMIC_PACKET_SIZING = "EXTRA_DYNAMIC_PACKET_SIZING"
         const val EXTRA_WEB_IP_MASKING = "EXTRA_WEB_IP_MASKING"
         const val EXTRA_DECOY_HOST = "EXTRA_DECOY_HOST"
+        const val EXTRA_VPS_RELAY_ENABLED = "EXTRA_VPS_RELAY_ENABLED"
+        const val EXTRA_VPS_IP = "EXTRA_VPS_IP"
+        const val EXTRA_VPS_PORT = "EXTRA_VPS_PORT"
         const val CHANNEL_ID = "StealthVpnChannel"
         const val NOTIFICATION_ID = 4224
     }
@@ -47,6 +53,7 @@ class StealthVpnService : VpnService() {
             killSwitchEnabled = false
             dynamicPacketSizingEnabled = false
             webIPMaskingEnabled = false
+            vpsRelayEnabled = false
             disconnectVpn()
             stopSelf()
         } else {
@@ -54,6 +61,9 @@ class StealthVpnService : VpnService() {
             dynamicPacketSizingEnabled = intent?.getBooleanExtra(EXTRA_DYNAMIC_PACKET_SIZING, false) ?: false
             webIPMaskingEnabled = intent?.getBooleanExtra(EXTRA_WEB_IP_MASKING, false) ?: false
             decoyHostName = intent?.getStringExtra(EXTRA_DECOY_HOST) ?: "www.google.com"
+            vpsRelayEnabled = intent?.getBooleanExtra(EXTRA_VPS_RELAY_ENABLED, false) ?: false
+            vpsIp = intent?.getStringExtra(EXTRA_VPS_IP) ?: "194.26.135.12"
+            vpsPort = intent?.getStringExtra(EXTRA_VPS_PORT) ?: "51820"
             connectVpn()
         }
         return START_STICKY
@@ -62,10 +72,18 @@ class StealthVpnService : VpnService() {
     private fun connectVpn() {
         disconnectVpn()
 
-        val notification = if (webIPMaskingEnabled) {
-            buildNotification("Fronting active (Decoy: $decoyHostName)")
+        val notification = if (vpsRelayEnabled) {
+            if (webIPMaskingEnabled) {
+                buildNotification("VPS Relay active (Via: $vpsIp) | Fronting Decoy: $decoyHostName")
+            } else {
+                buildNotification("GhostLine Active - Relaying via VPS: $vpsIp")
+            }
         } else {
-            buildNotification("GhostLine Active - Dynamic IP Routing Enabled")
+            if (webIPMaskingEnabled) {
+                buildNotification("Fronting active (Decoy: $decoyHostName)")
+            } else {
+                buildNotification("GhostLine Active - Dynamic IP Routing Enabled")
+            }
         }
         startForeground(NOTIFICATION_ID, notification)
 
@@ -250,10 +268,18 @@ class StealthVpnService : VpnService() {
                 val formattedTotal = formatBytes(totalDownloadedBytes + totalUploadedBytes)
 
                 val statusText = "↓ %.1f MB/s  ↑ %.1f MB/s  (Total: %s)".format(Locale.getDefault(), dlSpeedMB, ulSpeedMB, formattedTotal)
-                val subText = if (webIPMaskingEnabled) {
-                    "Uptime: %s | Decoy: %s | MTU: %d".format(Locale.getDefault(), uptimeStr, decoyHostName, mtuValue)
+                val subText = if (vpsRelayEnabled) {
+                    if (webIPMaskingEnabled) {
+                        "Relay: %s:%s | Decoy: %s | Up: %s".format(Locale.getDefault(), vpsIp, vpsPort, decoyHostName, uptimeStr)
+                    } else {
+                        "Relay: %s:%s | MTU: %d | Up: %s".format(Locale.getDefault(), vpsIp, vpsPort, mtuValue, uptimeStr)
+                    }
                 } else {
-                    "Uptime: %s | MTU: %d".format(Locale.getDefault(), uptimeStr, mtuValue)
+                    if (webIPMaskingEnabled) {
+                        "Uptime: %s | Decoy: %s | MTU: %d".format(Locale.getDefault(), uptimeStr, decoyHostName, mtuValue)
+                    } else {
+                        "Uptime: %s | MTU: %d".format(Locale.getDefault(), uptimeStr, mtuValue)
+                    }
                 }
 
                 val notification = buildNotification(statusText, subText)

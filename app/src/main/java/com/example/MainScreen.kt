@@ -790,6 +790,10 @@ fun RotatorTab(viewModel: VpnViewModel) {
     val isDynamicPacketSizingEnabled by viewModel.isDynamicPacketSizingEnabled.collectAsStateWithLifecycle()
     val isWebIPMaskingEnabled by viewModel.isWebIPMaskingEnabled.collectAsStateWithLifecycle()
     val isDecoyShuffleEnabled by viewModel.isDecoyShuffleEnabled.collectAsStateWithLifecycle()
+    val isVpsRelayEnabled by viewModel.isVpsRelayEnabled.collectAsStateWithLifecycle()
+    val vpsIp by viewModel.vpsIp.collectAsStateWithLifecycle()
+    val vpsPort by viewModel.vpsPort.collectAsStateWithLifecycle()
+    val vpsSecretKey by viewModel.vpsSecretKey.collectAsStateWithLifecycle()
     val decoyHost by viewModel.decoyHost.collectAsStateWithLifecycle()
     val decoyOptions = viewModel.decoyOptions
 
@@ -1339,6 +1343,135 @@ fun RotatorTab(viewModel: VpnViewModel) {
                                     uncheckedTrackColor = CyberCard
                                 ),
                                 modifier = Modifier.testTag("toggle_decoy_shuffle")
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Custom VPS Relay Gateway
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.2f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "CUSTOM VPS RELAY GATEWAY",
+                            color = CyberCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Route all outgoing session tunnels through your personal VPS relay node for customized hops.",
+                            color = CyberGray,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = isVpsRelayEnabled,
+                        onCheckedChange = { viewModel.toggleVpsRelay() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = CyberBlack,
+                            checkedTrackColor = CyberCyan,
+                            uncheckedThumbColor = CyberGray,
+                            uncheckedTrackColor = CyberCard
+                        ),
+                        modifier = Modifier.testTag("vps_relay_toggle")
+                    )
+                }
+
+                if (isVpsRelayEnabled) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    
+                    // VPS Server IP Configuration
+                    Text(
+                        "VPS SERVER IP ADDRESS",
+                        color = CyberWhite,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = vpsIp,
+                        onValueChange = { viewModel.vpsIp.value = it },
+                        placeholder = { Text("e.g. 194.26.135.12", color = CyberGray) },
+                        textStyle = androidx.compose.ui.text.TextStyle(color = CyberWhite, fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CyberCyan,
+                            unfocusedBorderColor = CyberGray.copy(alpha = 0.3f),
+                            focusedTextColor = CyberWhite,
+                            unfocusedTextColor = CyberWhite
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("vps_ip_input"),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // VPS Port & Secret Key
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(0.35f)) {
+                            Text(
+                                "PORT",
+                                color = CyberWhite,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = vpsPort,
+                                onValueChange = { viewModel.vpsPort.value = it },
+                                placeholder = { Text("51820", color = CyberGray) },
+                                textStyle = androidx.compose.ui.text.TextStyle(color = CyberWhite, fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = CyberCyan,
+                                    unfocusedBorderColor = CyberGray.copy(alpha = 0.3f),
+                                    focusedTextColor = CyberWhite,
+                                    unfocusedTextColor = CyberWhite
+                                ),
+                                modifier = Modifier.fillMaxWidth().testTag("vps_port_input"),
+                                singleLine = true
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(0.65f)) {
+                            Text(
+                                "WIREGUARD SECRET KEY",
+                                color = CyberWhite,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = vpsSecretKey,
+                                onValueChange = { viewModel.vpsSecretKey.value = it },
+                                placeholder = { Text("Curve25519 Secret Key", color = CyberGray) },
+                                textStyle = androidx.compose.ui.text.TextStyle(color = CyberWhite, fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = CyberCyan,
+                                    unfocusedBorderColor = CyberGray.copy(alpha = 0.3f),
+                                    focusedTextColor = CyberWhite,
+                                    unfocusedTextColor = CyberWhite
+                                ),
+                                modifier = Modifier.fillMaxWidth().testTag("vps_secret_key_input"),
+                                singleLine = true
                             )
                         }
                     }
