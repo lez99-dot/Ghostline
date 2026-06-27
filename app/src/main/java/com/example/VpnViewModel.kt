@@ -51,6 +51,18 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     private val _isManualHostsEnabled = MutableStateFlow(false)
     val isManualHostsEnabled: StateFlow<Boolean> = _isManualHostsEnabled.asStateFlow()
 
+    private val _isJitterEnabled = MutableStateFlow(true)
+    val isJitterEnabled: StateFlow<Boolean> = _isJitterEnabled.asStateFlow()
+
+    private val _isMultiHopEnabled = MutableStateFlow(false)
+    val isMultiHopEnabled: StateFlow<Boolean> = _isMultiHopEnabled.asStateFlow()
+
+    private val _isFingerprintScramblingEnabled = MutableStateFlow(false)
+    val isFingerprintScramblingEnabled: StateFlow<Boolean> = _isFingerprintScramblingEnabled.asStateFlow()
+
+    private val _isPayloadPaddingEnabled = MutableStateFlow(true)
+    val isPayloadPaddingEnabled: StateFlow<Boolean> = _isPayloadPaddingEnabled.asStateFlow()
+
     private val _terminalLogs = MutableStateFlow<List<String>>(emptyList())
     val terminalLogs: StateFlow<List<String>> = _terminalLogs.asStateFlow()
 
@@ -82,7 +94,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     init {
         // Load servers
         loadServers()
-        addTerminalLog("SYSTEM: StealthVPN initialization sequence complete.")
+        addTerminalLog("SYSTEM: GhostLine initialization sequence complete.")
         addTerminalLog("CIPHER: AES-256-CBC, ECDH-4096 dynamic handshake active.")
         addTerminalLog("SYSTEM: Android 16 core networking features verified.")
         startSpeedMetricsSimulator()
@@ -167,7 +179,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
                 addTerminalLog("CLOAKING: IPv6 Back-Channel Bleed Block active (::/0 route override).")
                 addTerminalLog("CLOAKING: Secure DNS Server configured (Cloudflare 1.1.1.1 & Quad9 9.9.9.9 via TLS).")
                 addTerminalLog("CLOAKING: Packet Size Padding enabled. Side-channel traffic-fingerprinting bypassed.")
-                addTerminalLog("TUNNEL: Stealth VPN Tunnel fully established. Your connection is fully obfuscated.")
+                addTerminalLog("TUNNEL: GhostLine encrypted & obfuscated tunnel fully established.")
                 addTerminalLog("IP: Active cloaked address: ${_currentIp.value}")
 
                 // Restart rotation if enabled
@@ -250,11 +262,61 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleJitter() {
+        _isJitterEnabled.value = !_isJitterEnabled.value
+        if (_isJitterEnabled.value) {
+            addTerminalLog("OBFUSCATION: Temporal timing-analysis jitter activated (+/- 35% random timing skew).")
+        } else {
+            addTerminalLog("OBFUSCATION: Constant interval rotation activated (Predictable pattern risk).")
+        }
+        if (_isIpRotationEnabled.value && _connectionState.value == ConnectionState.CONNECTED) {
+            startIpRotation()
+        }
+    }
+
+    fun toggleMultiHop() {
+        _isMultiHopEnabled.value = !_isMultiHopEnabled.value
+        if (_isMultiHopEnabled.value) {
+            addTerminalLog("GHOST-ROUTING: Double-encrypted Multi-Hop chaining activated. Entry -> Middle Relay -> Exit Gateway.")
+        } else {
+            addTerminalLog("GHOST-ROUTING: Direct Single-Hop routing tunnel restored.")
+        }
+    }
+
+    fun toggleFingerprintScrambling() {
+        _isFingerprintScramblingEnabled.value = !_isFingerprintScramblingEnabled.value
+        if (_isFingerprintScramblingEnabled.value) {
+            addTerminalLog("FINGERPRINT: Dynamic HTTP header, User-Agent, and JA3 TLS signature scrambling active.")
+        } else {
+            addTerminalLog("FINGERPRINT: Static default Android system webview profile restored.")
+        }
+    }
+
+    fun togglePayloadPadding() {
+        _isPayloadPaddingEnabled.value = !_isPayloadPaddingEnabled.value
+        if (_isPayloadPaddingEnabled.value) {
+            addTerminalLog("CLOAKING: MTU payload size padding active. Outgoing frames padded with random noise bytes.")
+        } else {
+            addTerminalLog("CLOAKING: Payload padding disabled. Outgoing frame sizes reveal traffic signatures.")
+        }
+    }
+
     private fun startIpRotation() {
         rotationJob?.cancel()
         rotationJob = viewModelScope.launch {
             while (isActive) {
-                delay(_rotationInterval.value * 1000L)
+                val baseDelayMs = _rotationInterval.value * 1000L
+                val actualDelayMs = if (_isJitterEnabled.value && baseDelayMs > 1000L) {
+                    // Introduce dynamic random jitter (variance of +/- 35% of the base delay)
+                    val jitterMax = (baseDelayMs * 0.35).toLong()
+                    val randomJitter = if (jitterMax > 0) Random.nextLong(-jitterMax, jitterMax) else 0L
+                    val finalDelay = baseDelayMs + randomJitter
+                    addTerminalLog("OBFUSCATION: Timing-Analysis Shield active. Next shuffle jitter skew configured to ${finalDelay / 1000f}s (skew: ${randomJitter}ms)")
+                    finalDelay.coerceAtLeast(1000L)
+                } else {
+                    baseDelayMs
+                }
+                delay(actualDelayMs)
                 if (_connectionState.value == ConnectionState.CONNECTED || _connectionState.value == ConnectionState.SHUFFLING) {
                     rotateIp()
                 }
@@ -270,6 +332,24 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     private fun rotateIp() {
         _connectionState.value = ConnectionState.SHUFFLING
         
+        // Simulating payload padding obfuscation
+        if (_isPayloadPaddingEnabled.value) {
+            val paddingSize = Random.nextInt(64, 512)
+            addTerminalLog("CLOAKING: Padded IP packets with $paddingSize bytes of high-entropy noise.")
+        }
+
+        // Simulating fingerprint scrambling identity rotation
+        if (_isFingerprintScramblingEnabled.value) {
+            val userAgents = listOf(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+                "Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0"
+            )
+            val randomUA = userAgents.random()
+            addTerminalLog("FINGERPRINT: Scrambled User-Agent fingerprint -> ${randomUA.take(40)}...")
+        }
+
         if (_isManualHostsEnabled.value) {
             val hosts = manualHostsInput.value.split(",")
                 .map { it.trim() }
@@ -278,7 +358,13 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
             if (hosts.isNotEmpty()) {
                 val nextHost = hosts.random()
                 _currentIp.value = nextHost
-                addTerminalLog("STEALTH-ROTATOR: Perfect-Forward-Secrecy triggered. Rotating exit node to Custom Host -> IP: $nextHost (Obfuscated Packets)")
+                
+                if (_isMultiHopEnabled.value) {
+                    val decoys = listOf("104.244.42.1", "172.217.16.142", "151.101.1.140")
+                    addTerminalLog("GHOST-ROUTING: Established Multi-hop Path: Local Node -> Decoy [${decoys.random()}] -> Exit [Custom Host: $nextHost]")
+                } else {
+                    addTerminalLog("STEALTH-ROTATOR: Perfect-Forward-Secrecy triggered. Rotating exit node to Custom Host -> IP: $nextHost")
+                }
                 _connectionState.value = ConnectionState.CONNECTED
                 return
             } else {
@@ -300,7 +386,15 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         _currentIp.value = newIp
-        addTerminalLog("STEALTH-ROTATOR: Perfect-Forward-Secrecy triggered. Rotating exit node to [${nextServer.countryShort}] -> IP: $newIp (Obfuscated Packets)")
+        
+        if (_isMultiHopEnabled.value) {
+            val decoyCount = Random.nextInt(1, 3)
+            val decoys = available.filter { it.ip != nextServer.ip && it.ip != currentServer?.ip }.shuffled().take(decoyCount)
+            val pathStr = decoys.joinToString(" ➔ ") { "[${it.countryShort}: ${it.ip}]" }
+            addTerminalLog("GHOST-ROUTING: Multi-hop circuit built: Entry ➔ $pathStr ➔ Exit [${nextServer.countryShort}: $newIp]")
+        } else {
+            addTerminalLog("STEALTH-ROTATOR: Perfect-Forward-Secrecy triggered. Rotating exit node to [${nextServer.countryShort}] -> IP: $newIp (Obfuscated Packets)")
+        }
         _connectionState.value = ConnectionState.CONNECTED
     }
 

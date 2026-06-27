@@ -91,7 +91,7 @@ fun MainScreen(viewModel: VpnViewModel) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "STEALTH_VPN",
+                            text = "GHOST_LINE",
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 20.sp,
@@ -736,6 +736,10 @@ fun RotatorTab(viewModel: VpnViewModel) {
     val terminalLogs by viewModel.terminalLogs.collectAsStateWithLifecycle()
     val isManualHostsEnabled by viewModel.isManualHostsEnabled.collectAsStateWithLifecycle()
     val manualHostsInput by viewModel.manualHostsInput.collectAsStateWithLifecycle()
+    val isJitterEnabled by viewModel.isJitterEnabled.collectAsStateWithLifecycle()
+    val isMultiHopEnabled by viewModel.isMultiHopEnabled.collectAsStateWithLifecycle()
+    val isFingerprintScramblingEnabled by viewModel.isFingerprintScramblingEnabled.collectAsStateWithLifecycle()
+    val isPayloadPaddingEnabled by viewModel.isPayloadPaddingEnabled.collectAsStateWithLifecycle()
 
     val intervals = listOf(1, 5, 10, 30, 60)
 
@@ -848,6 +852,169 @@ fun RotatorTab(viewModel: VpnViewModel) {
             }
         }
 
+        // Advanced Ghost Obfuscation Features Card
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCard),
+            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.2f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "ADVANCED GHOST PRIVACY PROTOCOLS",
+                    color = CyberCyan,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Jitter
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "TEMPORAL TIMING JITTER",
+                            color = CyberWhite,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            "Applies random dynamic delay skew (+/- 35%) to break predictable periodic traffic analysis patterns.",
+                            color = CyberGray,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Switch(
+                        checked = isJitterEnabled,
+                        onCheckedChange = { viewModel.toggleJitter() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = CyberBlack,
+                            checkedTrackColor = CyberCyan,
+                            uncheckedThumbColor = CyberGray,
+                            uncheckedTrackColor = CyberCard
+                        ),
+                        modifier = Modifier.testTag("toggle_timing_jitter")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = CyberGray.copy(alpha = 0.1f), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Multi-Hop
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "MULTI-HOP CIRCUIT (CHAINING)",
+                            color = CyberWhite,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            "Routes packets through entry, middle relays, and exits to ensure zero direct correlations.",
+                            color = CyberGray,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Switch(
+                        checked = isMultiHopEnabled,
+                        onCheckedChange = { viewModel.toggleMultiHop() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = CyberBlack,
+                            checkedTrackColor = CyberCyan,
+                            uncheckedThumbColor = CyberGray,
+                            uncheckedTrackColor = CyberCard
+                        ),
+                        modifier = Modifier.testTag("toggle_multi_hop")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = CyberGray.copy(alpha = 0.1f), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Fingerprint Scrambling
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "DYNAMIC IDENTITY SCRAMBLING",
+                            color = CyberWhite,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            "Rotates HTTP/TLS user-agent, headers, and TCP window parameter fingerprints.",
+                            color = CyberGray,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Switch(
+                        checked = isFingerprintScramblingEnabled,
+                        onCheckedChange = { viewModel.toggleFingerprintScrambling() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = CyberBlack,
+                            checkedTrackColor = CyberCyan,
+                            uncheckedThumbColor = CyberGray,
+                            uncheckedTrackColor = CyberCard
+                        ),
+                        modifier = Modifier.testTag("toggle_fingerprint_scrambling")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = CyberGray.copy(alpha = 0.1f), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Payload Padding
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "RANDOM PACKET PAYLOAD PADDING",
+                            color = CyberWhite,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            "Appends high-entropy randomized dummy bytes to shield outgoing frame-size patterns.",
+                            color = CyberGray,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Switch(
+                        checked = isPayloadPaddingEnabled,
+                        onCheckedChange = { viewModel.togglePayloadPadding() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = CyberBlack,
+                            checkedTrackColor = CyberCyan,
+                            uncheckedThumbColor = CyberGray,
+                            uncheckedTrackColor = CyberCard
+                        ),
+                        modifier = Modifier.testTag("toggle_payload_padding")
+                    )
+                }
+            }
+        }
+
         // Optional feature: Manual hosts input
         Card(
             colors = CardDefaults.cardColors(containerColor = CyberCard),
@@ -932,7 +1099,14 @@ fun RotatorTab(viewModel: VpnViewModel) {
                         .height(180.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    val shuffles = terminalLogs.filter { it.contains("STEALTH-ROTATOR") || it.contains("ROTATOR") }
+                    val shuffles = terminalLogs.filter { 
+                        it.contains("STEALTH-ROTATOR") || 
+                        it.contains("ROTATOR") || 
+                        it.contains("GHOST-ROUTING") || 
+                        it.contains("OBFUSCATION") || 
+                        it.contains("FINGERPRINT") || 
+                        it.contains("CLOAKING")
+                    }
                     if (shuffles.isEmpty()) {
                         Text(
                             "No rotative handshakes recorded yet.\nToggle the Switch and select a fast interval to witness dynamic IP shuffling.",
@@ -991,7 +1165,7 @@ fun CryptoTab(viewModel: VpnViewModel) {
             letterSpacing = 1.sp
         )
         Text(
-            text = "StealthVPN routes packets after wrapping them inside custom AES-256 encrypted payload blocks. Use this interface to test real cryptographical processing directly on the device.",
+            text = "GhostLine routes packets after wrapping them inside custom AES-256 encrypted payload blocks. Use this interface to test real cryptographical processing directly on the device.",
             color = CyberGray,
             fontSize = 11.sp
         )

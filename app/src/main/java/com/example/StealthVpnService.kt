@@ -45,13 +45,13 @@ class StealthVpnService : VpnService() {
     private fun connectVpn() {
         disconnectVpn()
 
-        val notification = buildNotification("StealthVPN Active - Dynamic IP Routing Enabled")
+        val notification = buildNotification("GhostLine Active - Dynamic IP Routing Enabled")
         startForeground(NOTIFICATION_ID, notification)
 
         job = serviceScope.launch {
             try {
                 val builder = Builder()
-                    .setSession("StealthVPN Tunnel")
+                    .setSession("GhostLine Tunnel")
                     .setMtu(1400) // Lower MTU allows packet-padding room & bypasses side-channel analysis
                     .addAddress("10.8.0.2", 24)
                     .addRoute("0.0.0.0", 0) // Capture all IPv4 traffic
@@ -113,7 +113,7 @@ class StealthVpnService : VpnService() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("StealthVPN Tunnel")
+            .setContentTitle("GhostLine Tunnel")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pendingIntent)
@@ -126,7 +126,7 @@ class StealthVpnService : VpnService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "StealthVPN Service",
+                "GhostLine Service",
                 NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
