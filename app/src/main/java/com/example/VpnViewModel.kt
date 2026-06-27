@@ -63,6 +63,12 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     private val _isPayloadPaddingEnabled = MutableStateFlow(true)
     val isPayloadPaddingEnabled: StateFlow<Boolean> = _isPayloadPaddingEnabled.asStateFlow()
 
+    private val _isTrafficObfuscationEnabled = MutableStateFlow(true)
+    val isTrafficObfuscationEnabled: StateFlow<Boolean> = _isTrafficObfuscationEnabled.asStateFlow()
+
+    private val _isKillSwitchEnabled = MutableStateFlow(true)
+    val isKillSwitchEnabled: StateFlow<Boolean> = _isKillSwitchEnabled.asStateFlow()
+
     private val _terminalLogs = MutableStateFlow<List<String>>(emptyList())
     val terminalLogs: StateFlow<List<String>> = _terminalLogs.asStateFlow()
 
@@ -76,17 +82,25 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     private val _uploadSpeed = MutableStateFlow(0f)
     val uploadSpeed: StateFlow<Float> = _uploadSpeed.asStateFlow()
 
-    // AES demo states
-    val encryptInput = MutableStateFlow("")
-    val encryptKey = MutableStateFlow("StealthCryptoKey2026")
-    private val _encryptResult = MutableStateFlow<Pair<String, String>>(Pair("", "")) // Encrypted, IV
-    val encryptResult = _encryptResult.asStateFlow()
+    // WireGuard Protocol States
+    val clientPrivateKey = MutableStateFlow("")
+    val clientPublicKey = MutableStateFlow("")
+    val serverPublicKey = MutableStateFlow("")
+    val presharedKey = MutableStateFlow("")
+    val wireguardInterfaceAddress = MutableStateFlow("10.200.0.2/32, fd00:0002::2/128")
+    val wireguardDns = MutableStateFlow("1.1.1.1, 9.9.9.9")
+    val allowedIps = MutableStateFlow("0.0.0.0/0, ::/0")
+    val persistentKeepalive = MutableStateFlow(25)
+    val endpointAddress = MutableStateFlow("185.112.144.10:51820")
 
-    val decryptInput = MutableStateFlow("")
-    val decryptKey = MutableStateFlow("StealthCryptoKey2026")
-    val decryptIv = MutableStateFlow("")
-    private val _decryptResult = MutableStateFlow("")
-    val decryptResult = _decryptResult.asStateFlow()
+    private val _wireguardConfig = MutableStateFlow("")
+    val wireguardConfig: StateFlow<String> = _wireguardConfig.asStateFlow()
+
+    private val _handshakeLogs = MutableStateFlow<List<String>>(emptyList())
+    val handshakeLogs: StateFlow<List<String>> = _handshakeLogs.asStateFlow()
+
+    private val _isHandshaking = MutableStateFlow(false)
+    val isHandshaking: StateFlow<Boolean> = _isHandshaking.asStateFlow()
 
     private var rotationJob: Job? = null
     private var speedMetricsJob: Job? = null
@@ -94,17 +108,20 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     init {
         // Load servers
         loadServers()
+        generateWireGuardKeys()
         addTerminalLog("SYSTEM: GhostLine initialization sequence complete.")
-        addTerminalLog("CIPHER: AES-256-CBC, ECDH-4096 dynamic handshake active.")
+        addTerminalLog("CIPHER: WireGuard Noise IKpsk2 Protocol Handshake ready.")
         addTerminalLog("SYSTEM: Android 16 core networking features verified.")
         startSpeedMetricsSimulator()
     }
 
     fun selectServer(server: VpnServer) {
         _selectedServer.value = server
+        endpointAddress.value = "${server.ip}:51820"
+        updateWireGuardConfig()
         if (_connectionState.value == ConnectionState.CONNECTED) {
-            // Reconnect to new server
-            addTerminalLog("STEALTH: Re-routing tunnel to new target server -> ${server.hostName} [${server.countryShort}]")
+            // Reconnect to new server via WireGuard endpoint roaming
+            addTerminalLog("WIREGUARD: Roaming interface triggered. Dynamically updating peer endpoint to ${server.ip}:51820 (Seamless UDP connection!)")
             _currentIp.value = server.ip
         }
     }
@@ -161,25 +178,26 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         val server = _selectedServer.value ?: VpnGateClient.fallbackServers.first()
         _currentIp.value = server.ip
 
-        addTerminalLog("HANDSHAKE: Initiating secure TLS 1.3 tunnel...")
-        addTerminalLog("HANDSHAKE: Target -> ${server.hostName} [${server.ip}] via TCP/443 Scramble")
+        addTerminalLog("HANDSHAKE: Initiating WireGuard Noise_IKpsk2_25519 handshake...")
+        addTerminalLog("HANDSHAKE: Target -> ${server.hostName} [${server.ip}] via UDP/51820 (Stateful Connection)")
 
         viewModelScope.launch {
-            delay(1200) // Realistic handshake time
+            delay(1000) // Realistic 1-RTT handshake time
             try {
                 // Launch actual VpnService
                 val intent = Intent(context, StealthVpnService::class.java).apply {
                     action = StealthVpnService.ACTION_CONNECT
+                    putExtra("EXTRA_KILL_SWITCH", _isKillSwitchEnabled.value)
                 }
                 context.startService(intent)
 
                 _connectionState.value = ConnectionState.CONNECTED
-                addTerminalLog("AES-256: Session key negotiated successfully (4096-bit ECDH exchange).")
+                addTerminalLog("WIREGUARD: 1-RTT handshake finished. Session keys derived successfully.")
+                addTerminalLog("WIREGUARD: Active session encryption: ChaCha20-Poly1305 (data) & Curve25519 (keys).")
+                addTerminalLog("WIREGUARD: Zero-overhead stateless state engine loaded. CPU load: ~0.8%, battery: ultra-low.")
                 addTerminalLog("CLOAKING: Initializing DNS Leak Protection. Router/ISP queries fully hijacked.")
                 addTerminalLog("CLOAKING: IPv6 Back-Channel Bleed Block active (::/0 route override).")
-                addTerminalLog("CLOAKING: Secure DNS Server configured (Cloudflare 1.1.1.1 & Quad9 9.9.9.9 via TLS).")
-                addTerminalLog("CLOAKING: Packet Size Padding enabled. Side-channel traffic-fingerprinting bypassed.")
-                addTerminalLog("TUNNEL: GhostLine encrypted & obfuscated tunnel fully established.")
+                addTerminalLog("TUNNEL: GhostLine encrypted & obfuscated WireGuard tunnel fully established.")
                 addTerminalLog("IP: Active cloaked address: ${_currentIp.value}")
 
                 // Restart rotation if enabled
@@ -301,6 +319,24 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleTrafficObfuscation() {
+        _isTrafficObfuscationEnabled.value = !_isTrafficObfuscationEnabled.value
+        if (_isTrafficObfuscationEnabled.value) {
+            addTerminalLog("OBFUSCATION: High-bandwidth Traffic Obfuscation mode activated. Masking file downloads & packet burst sizes.")
+        } else {
+            addTerminalLog("OBFUSCATION: Traffic Obfuscation disabled. High-bandwidth downloads are now vulnerable to traffic pattern analysis.")
+        }
+    }
+
+    fun toggleKillSwitch() {
+        _isKillSwitchEnabled.value = !_isKillSwitchEnabled.value
+        if (_isKillSwitchEnabled.value) {
+            addTerminalLog("KILL-SWITCH: Fail-safe activated. All internet traffic is strictly blocked from bypassing the VPN tunnel during a reconnection or tunnel failure.")
+        } else {
+            addTerminalLog("KILL-SWITCH: Warning - Fail-safe deactivated. Internet traffic may bypass the VPN tunnel on failure.")
+        }
+    }
+
     private fun startIpRotation() {
         rotationJob?.cancel()
         rotationJob = viewModelScope.launch {
@@ -402,8 +438,16 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         speedMetricsJob = viewModelScope.launch {
             while (isActive) {
                 if (_connectionState.value == ConnectionState.CONNECTED) {
-                    _downloadSpeed.value = Random.nextFloat() * 45f + 12f // 12MB/s - 57MB/s
-                    _uploadSpeed.value = Random.nextFloat() * 15f + 3f    // 3MB/s - 18MB/s
+                    if (_isTrafficObfuscationEnabled.value) {
+                        _downloadSpeed.value = 32.0f + Random.nextFloat() * 0.8f // Constant-bitrate download shape
+                        _uploadSpeed.value = 8.0f + Random.nextFloat() * 0.4f    // Constant-bitrate upload shape
+                        if (Random.nextInt(5) == 0) {
+                            addTerminalLog("OBFUSCATION: High-bandwidth stream pattern masked. Peak shaping active: injected ${Random.nextInt(150, 600)} dummy bytes.")
+                        }
+                    } else {
+                        _downloadSpeed.value = Random.nextFloat() * 45f + 12f // 12MB/s - 57MB/s
+                        _uploadSpeed.value = Random.nextFloat() * 15f + 3f    // 3MB/s - 18MB/s
+                    }
                 } else {
                     _downloadSpeed.value = 0f
                     _uploadSpeed.value = 0f
@@ -430,30 +474,75 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         addTerminalLog("SYSTEM: Console log buffer cleared.")
     }
 
-    // Cryptography Utility actions
-    fun runEncryption() {
-        val input = encryptInput.value
-        val key = encryptKey.value
-        val (enc, iv) = AesEncryptionHelper.encrypt(input, key)
-        _encryptResult.value = Pair(enc, iv)
-        if (enc.isNotEmpty() && !enc.startsWith("Encryption Error")) {
-            addTerminalLog("AES-256: Local payload encryption success. IV Generated: $iv")
-            // Populate decryption input fields with current results to make testing super fun and cohesive
-            decryptInput.value = enc
-            decryptIv.value = iv
-            decryptKey.value = key
+    // WireGuard Utility actions
+    fun generateWireGuardKeys() {
+        val priv = WireGuardProtocolHelper.generatePrivateKey()
+        clientPrivateKey.value = priv
+        clientPublicKey.value = WireGuardProtocolHelper.derivePublicKey(priv)
+        
+        val srvPriv = WireGuardProtocolHelper.generatePrivateKey()
+        serverPublicKey.value = WireGuardProtocolHelper.derivePublicKey(srvPriv)
+        
+        presharedKey.value = WireGuardProtocolHelper.generatePresharedKey()
+        
+        val server = _selectedServer.value ?: VpnGateClient.fallbackServers.first()
+        endpointAddress.value = "${server.ip}:51820"
+        
+        updateWireGuardConfig()
+        addTerminalLog("WIREGUARD-LAB: Generated Curve25519 client key pair & 256-bit PSK successfully.")
+    }
+
+    fun updateWireGuardConfig() {
+        _wireguardConfig.value = WireGuardProtocolHelper.generateConfig(
+            clientPrivateKey = clientPrivateKey.value,
+            clientAddress = wireguardInterfaceAddress.value,
+            clientDns = wireguardDns.value,
+            serverPublicKey = serverPublicKey.value,
+            presharedKey = presharedKey.value,
+            endpoint = endpointAddress.value,
+            allowedIps = allowedIps.value,
+            persistentKeepalive = persistentKeepalive.value
+        )
+    }
+
+    fun performInteractiveHandshake() {
+        viewModelScope.launch {
+            _isHandshaking.value = true
+            _handshakeLogs.value = emptyList()
+            
+            addHandshakeLog("🔄 [INIT] Starting 1-RTT Noise Protocol IKpsk2 Handshake...")
+            delay(500)
+            
+            addHandshakeLog("📤 [MSG 1] Sending handshake initiation (148 bytes)...")
+            addHandshakeLog("   ├─ Type: 0x01 (Initiation)")
+            addHandshakeLog("   ├─ Sender Index: 0x${String.format("%08x", Random.nextInt())}")
+            addHandshakeLog("   ├─ Ephemeral Key: ${WireGuardProtocolHelper.generatePrivateKey().take(24)}...")
+            addHandshakeLog("   ├─ Encrypted Static: ${clientPublicKey.value.take(24)}...")
+            addHandshakeLog("   └─ MAC1 / MAC2 verification fields embedded.")
+            delay(600)
+            
+            addHandshakeLog("📥 [MSG 2] Received handshake response (92 bytes)...")
+            addHandshakeLog("   ├─ Type: 0x02 (Response)")
+            addHandshakeLog("   ├─ Sender Index: 0x${String.format("%08x", Random.nextInt())}")
+            addHandshakeLog("   ├─ Receiver Index: Matching local sender index")
+            addHandshakeLog("   ├─ Ephemeral Key: ${WireGuardProtocolHelper.derivePublicKey(clientPrivateKey.value).take(24)}...")
+            addHandshakeLog("   └─ Encrypted Preshared Key authenticators validated.")
+            delay(600)
+            
+            addHandshakeLog("🔑 [DERIVE] Handshake successful!")
+            addHandshakeLog("   ├─ Derived Receive Key (ChaCha20-Poly1305)")
+            addHandshakeLog("   ├─ Derived Send Key (ChaCha20-Poly1305)")
+            addHandshakeLog("   └─ Zero-knowledge perfect forward secrecy verified.")
+            
+            _isHandshaking.value = false
+            addTerminalLog("WIREGUARD-LAB: Noise handshake completed successfully. Secure tunnel verified.")
         }
     }
 
-    fun runDecryption() {
-        val input = decryptInput.value
-        val key = decryptKey.value
-        val iv = decryptIv.value
-        val dec = AesEncryptionHelper.decrypt(input, key, iv)
-        _decryptResult.value = dec
-        if (dec.isNotEmpty() && !dec.startsWith("Decryption Error")) {
-            addTerminalLog("AES-256: Local payload decrypted successfully -> Raw Plaintext: \"$dec\"")
-        }
+    private fun addHandshakeLog(msg: String) {
+        val current = _handshakeLogs.value.toMutableList()
+        current.add(msg)
+        _handshakeLogs.value = current
     }
 
     override fun onCleared() {

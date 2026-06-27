@@ -18,10 +18,12 @@ class StealthVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var job: Job? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var killSwitchEnabled = false
 
     companion object {
         const val ACTION_CONNECT = "com.example.stealthvpn.CONNECT"
         const val ACTION_DISCONNECT = "com.example.stealthvpn.DISCONNECT"
+        const val EXTRA_KILL_SWITCH = "EXTRA_KILL_SWITCH"
         const val CHANNEL_ID = "StealthVpnChannel"
         const val NOTIFICATION_ID = 4224
     }
@@ -34,9 +36,11 @@ class StealthVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         if (action == ACTION_DISCONNECT) {
+            killSwitchEnabled = false
             disconnectVpn()
             stopSelf()
         } else {
+            killSwitchEnabled = intent?.getBooleanExtra(EXTRA_KILL_SWITCH, false) ?: false
             connectVpn()
         }
         return START_STICKY
@@ -75,6 +79,16 @@ class StealthVpnService : VpnService() {
                     } catch (e: Exception) {
                         -1
                     }
+                    if (readBytes < 0) {
+                        // Tunnel connection dropped or failed!
+                        if (killSwitchEnabled) {
+                            enforceNetworkBlock()
+                            break
+                        } else {
+                            disconnectVpn()
+                            break
+                        }
+                    }
                     if (readBytes > 0) {
                         buffer.clear()
                     }
@@ -82,8 +96,40 @@ class StealthVpnService : VpnService() {
                 }
             } catch (e: Exception) {
                 Log.e("StealthVpnService", "Error in VPN execution", e)
-                disconnectVpn()
+                if (killSwitchEnabled) {
+                    enforceNetworkBlock()
+                } else {
+                    disconnectVpn()
+                }
             }
+        }
+    }
+
+    private fun enforceNetworkBlock() {
+        Log.w("StealthVpnService", "Enforcing network block due to Kill Switch.")
+        val notification = buildNotification("GhostLine Blocked - Kill Switch Active (Preventing Leak)")
+        val manager = getSystemService(NotificationManager::class.java)
+        manager?.notify(NOTIFICATION_ID, notification)
+
+        try {
+            vpnInterface?.close()
+        } catch (e: Exception) {
+            // ignore
+        }
+        vpnInterface = null
+
+        // Establish a persistent virtual null/blackhole interface to route all traffic to a dead end
+        try {
+            val builder = Builder()
+                .setSession("GhostLine Blackhole")
+                .setMtu(1400)
+                .addAddress("10.8.0.3", 24)
+                .addRoute("0.0.0.0", 0)
+                .addRoute("::", 0)
+            vpnInterface = builder.establish()
+            Log.d("StealthVpnService", "Blackhole interface established. All traffic blocked.")
+        } catch (e: Exception) {
+            Log.e("StealthVpnService", "Failed to establish blackhole interface", e)
         }
     }
 
