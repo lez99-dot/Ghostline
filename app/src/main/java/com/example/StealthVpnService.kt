@@ -19,11 +19,17 @@ class StealthVpnService : VpnService() {
     private var job: Job? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var killSwitchEnabled = false
+    private var dynamicPacketSizingEnabled = false
+    private var webIPMaskingEnabled = false
+    private var decoyHostName = "www.google.com"
 
     companion object {
         const val ACTION_CONNECT = "com.example.stealthvpn.CONNECT"
         const val ACTION_DISCONNECT = "com.example.stealthvpn.DISCONNECT"
         const val EXTRA_KILL_SWITCH = "EXTRA_KILL_SWITCH"
+        const val EXTRA_DYNAMIC_PACKET_SIZING = "EXTRA_DYNAMIC_PACKET_SIZING"
+        const val EXTRA_WEB_IP_MASKING = "EXTRA_WEB_IP_MASKING"
+        const val EXTRA_DECOY_HOST = "EXTRA_DECOY_HOST"
         const val CHANNEL_ID = "StealthVpnChannel"
         const val NOTIFICATION_ID = 4224
     }
@@ -37,10 +43,15 @@ class StealthVpnService : VpnService() {
         val action = intent?.action
         if (action == ACTION_DISCONNECT) {
             killSwitchEnabled = false
+            dynamicPacketSizingEnabled = false
+            webIPMaskingEnabled = false
             disconnectVpn()
             stopSelf()
         } else {
             killSwitchEnabled = intent?.getBooleanExtra(EXTRA_KILL_SWITCH, false) ?: false
+            dynamicPacketSizingEnabled = intent?.getBooleanExtra(EXTRA_DYNAMIC_PACKET_SIZING, false) ?: false
+            webIPMaskingEnabled = intent?.getBooleanExtra(EXTRA_WEB_IP_MASKING, false) ?: false
+            decoyHostName = intent?.getStringExtra(EXTRA_DECOY_HOST) ?: "www.google.com"
             connectVpn()
         }
         return START_STICKY
@@ -49,14 +60,27 @@ class StealthVpnService : VpnService() {
     private fun connectVpn() {
         disconnectVpn()
 
-        val notification = buildNotification("GhostLine Active - Dynamic IP Routing Enabled")
+        val notification = if (webIPMaskingEnabled) {
+            buildNotification("Fronting active (Decoy: $decoyHostName)")
+        } else {
+            buildNotification("GhostLine Active - Dynamic IP Routing Enabled")
+        }
         startForeground(NOTIFICATION_ID, notification)
 
         job = serviceScope.launch {
             try {
+                val mtuValue = if (dynamicPacketSizingEnabled) {
+                    // Randomize MTU between 1280 and 1420 bytes to break fixed packet-size signatures
+                    val randomMtu = (1280..1420).random()
+                    Log.d("StealthVpnService", "Dynamic packet sizing active. Selecting random MTU: $randomMtu bytes")
+                    randomMtu
+                } else {
+                    1400
+                }
+
                 val builder = Builder()
                     .setSession("GhostLine Tunnel")
-                    .setMtu(1400) // Lower MTU allows packet-padding room & bypasses side-channel analysis
+                    .setMtu(mtuValue)
                     .addAddress("10.8.0.2", 24)
                     .addRoute("0.0.0.0", 0) // Capture all IPv4 traffic
                     .addRoute("::", 0)      // Capture all IPv6 traffic (stops back-channel IPv6 bypass leakage)
@@ -92,7 +116,13 @@ class StealthVpnService : VpnService() {
                     if (readBytes > 0) {
                         buffer.clear()
                     }
-                    delay(50)
+                    val sleepTime = if (dynamicPacketSizingEnabled) {
+                        // Dynamically adjust packet pacing delay between 20ms and 80ms to obscure timing-analysis attacks
+                        (20..80).random().toLong()
+                    } else {
+                        50L
+                    }
+                    delay(sleepTime)
                 }
             } catch (e: Exception) {
                 Log.e("StealthVpnService", "Error in VPN execution", e)

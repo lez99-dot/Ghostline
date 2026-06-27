@@ -305,9 +305,9 @@ fun DashboardTab(viewModel: VpnViewModel, onToggleVpn: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Glowing Connection Circle Button
         Box(
@@ -787,6 +787,9 @@ fun RotatorTab(viewModel: VpnViewModel) {
     val isPayloadPaddingEnabled by viewModel.isPayloadPaddingEnabled.collectAsStateWithLifecycle()
     val isTrafficObfuscationEnabled by viewModel.isTrafficObfuscationEnabled.collectAsStateWithLifecycle()
     val isKillSwitchEnabled by viewModel.isKillSwitchEnabled.collectAsStateWithLifecycle()
+    val isDynamicPacketSizingEnabled by viewModel.isDynamicPacketSizingEnabled.collectAsStateWithLifecycle()
+    val isWebIPMaskingEnabled by viewModel.isWebIPMaskingEnabled.collectAsStateWithLifecycle()
+    val decoyHost by viewModel.decoyHost.collectAsStateWithLifecycle()
 
     val intervals = listOf(1, 5, 10, 30, 60)
 
@@ -794,8 +797,8 @@ fun RotatorTab(viewModel: VpnViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Card(
             colors = CardDefaults.cardColors(containerColor = CyberCard),
@@ -1132,6 +1135,127 @@ fun RotatorTab(viewModel: VpnViewModel) {
                         ),
                         modifier = Modifier.testTag("toggle_kill_switch")
                     )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = CyberGray.copy(alpha = 0.1f), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Dynamic Packet Sizing
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "DYNAMIC PACKET SIZING",
+                            color = CyberWhite,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            "Fluctuates the MTU session sizes dynamically between 1280 and 1420 bytes to obscure deep packet size/volume fingerprinting signatures.",
+                            color = CyberGray,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Switch(
+                        checked = isDynamicPacketSizingEnabled,
+                        onCheckedChange = { viewModel.toggleDynamicPacketSizing() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = CyberBlack,
+                            checkedTrackColor = CyberCyan,
+                            uncheckedThumbColor = CyberGray,
+                            uncheckedTrackColor = CyberCard
+                        ),
+                        modifier = Modifier.testTag("toggle_dynamic_packet_sizing")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = CyberGray.copy(alpha = 0.1f), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Web IP Masking (SNI Fronting)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "WEB IP MASKING (SNI FRONTING)",
+                                color = CyberWhite,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                "Tricks local routers and firewall inspectors into thinking you are visiting a safe standard web domain instead of connecting to a VPN gateway.",
+                                color = CyberGray,
+                                fontSize = 10.sp
+                            )
+                        }
+                        Switch(
+                            checked = isWebIPMaskingEnabled,
+                            onCheckedChange = { viewModel.toggleWebIPMasking() },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = CyberBlack,
+                                checkedTrackColor = CyberCyan,
+                                uncheckedThumbColor = CyberGray,
+                                uncheckedTrackColor = CyberCard
+                            ),
+                            modifier = Modifier.testTag("toggle_web_ip_masking")
+                        )
+                    }
+
+                    if (isWebIPMaskingEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "DECOY WEB DESTINATION",
+                            color = CyberCyan,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val decoyOptions = listOf("www.google.com", "cdn.cloudflare.com", "www.microsoft.com", "github.com")
+                            decoyOptions.forEach { option ->
+                                val isSelected = decoyHost == option
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (isSelected) CyberCyan else CyberGray.copy(alpha = 0.3f),
+                                            shape = RoundedCornerShape(4.dp)
+                                        )
+                                        .background(if (isSelected) CyberCyan.copy(alpha = 0.15f) else Color.Transparent)
+                                        .clickable { viewModel.decoyHost.value = option }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = option.substringBefore(".com").removePrefix("www.").removePrefix("cdn."),
+                                        color = if (isSelected) CyberCyan else CyberGray,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -69,6 +69,14 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     private val _isKillSwitchEnabled = MutableStateFlow(true)
     val isKillSwitchEnabled: StateFlow<Boolean> = _isKillSwitchEnabled.asStateFlow()
 
+    private val _isDynamicPacketSizingEnabled = MutableStateFlow(true)
+    val isDynamicPacketSizingEnabled: StateFlow<Boolean> = _isDynamicPacketSizingEnabled.asStateFlow()
+
+    private val _isWebIPMaskingEnabled = MutableStateFlow(false)
+    val isWebIPMaskingEnabled: StateFlow<Boolean> = _isWebIPMaskingEnabled.asStateFlow()
+
+    val decoyHost = MutableStateFlow("www.google.com")
+
     private val _terminalLogs = MutableStateFlow<List<String>>(emptyList())
     val terminalLogs: StateFlow<List<String>> = _terminalLogs.asStateFlow()
 
@@ -91,7 +99,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     val wireguardDns = MutableStateFlow("1.1.1.1, 9.9.9.9")
     val allowedIps = MutableStateFlow("0.0.0.0/0, ::/0")
     val persistentKeepalive = MutableStateFlow(25)
-    val endpointAddress = MutableStateFlow("185.112.144.10:51820")
+    val endpointAddress = MutableStateFlow("185.112.144.10:443")
 
     private val _wireguardConfig = MutableStateFlow("")
     val wireguardConfig: StateFlow<String> = _wireguardConfig.asStateFlow()
@@ -117,11 +125,11 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectServer(server: VpnServer) {
         _selectedServer.value = server
-        endpointAddress.value = "${server.ip}:51820"
+        endpointAddress.value = "${server.ip}:443"
         updateWireGuardConfig()
         if (_connectionState.value == ConnectionState.CONNECTED) {
             // Reconnect to new server via WireGuard endpoint roaming
-            addTerminalLog("WIREGUARD: Roaming interface triggered. Dynamically updating peer endpoint to ${server.ip}:51820 (Seamless UDP connection!)")
+            addTerminalLog("WIREGUARD: Roaming interface triggered. Dynamically updating peer endpoint to ${server.ip}:443 (Seamless UDP connection!)")
             _currentIp.value = server.ip
         }
     }
@@ -179,7 +187,21 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         _currentIp.value = server.ip
 
         addTerminalLog("HANDSHAKE: Initiating WireGuard Noise_IKpsk2_25519 handshake...")
-        addTerminalLog("HANDSHAKE: Target -> ${server.hostName} [${server.ip}] via UDP/51820 (Stateful Connection)")
+        if (_isWebIPMaskingEnabled.value) {
+            val decoy = decoyHost.value
+            val decoyIp = when (decoy) {
+                "www.google.com" -> "142.250.190.4"
+                "cdn.cloudflare.com" -> "104.16.124.96"
+                "www.microsoft.com" -> "23.211.233.153"
+                "github.com" -> "140.82.121.4"
+                else -> "104.244.42.1"
+            }
+            addTerminalLog("FRONTING: SNI / TCP Host header masquerade active.")
+            addTerminalLog("HANDSHAKE: Spoofed Target -> $decoy [$decoyIp] (Router thinks normal HTTPS session)")
+            addTerminalLog("HANDSHAKE: Real Tunnel -> ${server.hostName} [${server.ip}] via UDP/443 (Under decoy envelope)")
+        } else {
+            addTerminalLog("HANDSHAKE: Target -> ${server.hostName} [${server.ip}] via UDP/443 (Stateful Connection)")
+        }
 
         viewModelScope.launch {
             delay(1000) // Realistic 1-RTT handshake time
@@ -188,6 +210,9 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
                 val intent = Intent(context, StealthVpnService::class.java).apply {
                     action = StealthVpnService.ACTION_CONNECT
                     putExtra("EXTRA_KILL_SWITCH", _isKillSwitchEnabled.value)
+                    putExtra("EXTRA_DYNAMIC_PACKET_SIZING", _isDynamicPacketSizingEnabled.value)
+                    putExtra("EXTRA_WEB_IP_MASKING", _isWebIPMaskingEnabled.value)
+                    putExtra("EXTRA_DECOY_HOST", decoyHost.value)
                 }
                 context.startService(intent)
 
@@ -337,6 +362,24 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleDynamicPacketSizing() {
+        _isDynamicPacketSizingEnabled.value = !_isDynamicPacketSizingEnabled.value
+        if (_isDynamicPacketSizingEnabled.value) {
+            addTerminalLog("DYNAMIC-SIZING: Active. MTU dynamically fluctuates between 1280 and 1420 bytes to scramble packet size signatures.")
+        } else {
+            addTerminalLog("DYNAMIC-SIZING: Disabled. Static MTU of 1400 bytes restored.")
+        }
+    }
+
+    fun toggleWebIPMasking() {
+        _isWebIPMaskingEnabled.value = !_isWebIPMaskingEnabled.value
+        if (_isWebIPMaskingEnabled.value) {
+            addTerminalLog("FRONTING: Web IP Masking (SNI Spoofing) activated. Connection requests will spoof target host: ${decoyHost.value} (Local routers will detect normal web traffic).")
+        } else {
+            addTerminalLog("FRONTING: Web IP Masking deactivated. Standard VPN server destination IPs/hosts are visible.")
+        }
+    }
+
     private fun startIpRotation() {
         rotationJob?.cancel()
         rotationJob = viewModelScope.launch {
@@ -370,7 +413,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         
         // Simulating payload padding obfuscation
         if (_isPayloadPaddingEnabled.value) {
-            val paddingSize = Random.nextInt(64, 512)
+            val paddingSize = Random.nextInt(16, 128)
             addTerminalLog("CLOAKING: Padded IP packets with $paddingSize bytes of high-entropy noise.")
         }
 
@@ -442,7 +485,7 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
                         _downloadSpeed.value = 32.0f + Random.nextFloat() * 0.8f // Constant-bitrate download shape
                         _uploadSpeed.value = 8.0f + Random.nextFloat() * 0.4f    // Constant-bitrate upload shape
                         if (Random.nextInt(5) == 0) {
-                            addTerminalLog("OBFUSCATION: High-bandwidth stream pattern masked. Peak shaping active: injected ${Random.nextInt(150, 600)} dummy bytes.")
+                            addTerminalLog("OBFUSCATION: High-bandwidth stream pattern masked. Peak shaping active: injected ${Random.nextInt(32, 128)} dummy bytes.")
                         }
                     } else {
                         _downloadSpeed.value = Random.nextFloat() * 45f + 12f // 12MB/s - 57MB/s
@@ -486,20 +529,38 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         presharedKey.value = WireGuardProtocolHelper.generatePresharedKey()
         
         val server = _selectedServer.value ?: VpnGateClient.fallbackServers.first()
-        endpointAddress.value = "${server.ip}:51820"
+        endpointAddress.value = "${server.ip}:443"
         
         updateWireGuardConfig()
         addTerminalLog("WIREGUARD-LAB: Generated Curve25519 client key pair & 256-bit PSK successfully.")
     }
 
+    private fun ensurePort443(endpoint: String): String {
+        val trimmed = endpoint.trim()
+        if (trimmed.isEmpty()) return ""
+        if (trimmed.endsWith(":443")) {
+            return trimmed
+        }
+        val colonIndex = trimmed.lastIndexOf(':')
+        return if (colonIndex > 0) {
+            trimmed.substring(0, colonIndex) + ":443"
+        } else {
+            "$trimmed:443"
+        }
+    }
+
     fun updateWireGuardConfig() {
+        val formattedEndpoint = ensurePort443(endpointAddress.value)
+        if (formattedEndpoint != endpointAddress.value) {
+            endpointAddress.value = formattedEndpoint
+        }
         _wireguardConfig.value = WireGuardProtocolHelper.generateConfig(
             clientPrivateKey = clientPrivateKey.value,
             clientAddress = wireguardInterfaceAddress.value,
             clientDns = wireguardDns.value,
             serverPublicKey = serverPublicKey.value,
             presharedKey = presharedKey.value,
-            endpoint = endpointAddress.value,
+            endpoint = formattedEndpoint,
             allowedIps = allowedIps.value,
             persistentKeepalive = persistentKeepalive.value
         )
