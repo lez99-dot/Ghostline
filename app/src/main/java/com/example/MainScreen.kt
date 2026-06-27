@@ -789,7 +789,9 @@ fun RotatorTab(viewModel: VpnViewModel) {
     val isKillSwitchEnabled by viewModel.isKillSwitchEnabled.collectAsStateWithLifecycle()
     val isDynamicPacketSizingEnabled by viewModel.isDynamicPacketSizingEnabled.collectAsStateWithLifecycle()
     val isWebIPMaskingEnabled by viewModel.isWebIPMaskingEnabled.collectAsStateWithLifecycle()
+    val isDecoyShuffleEnabled by viewModel.isDecoyShuffleEnabled.collectAsStateWithLifecycle()
     val decoyHost by viewModel.decoyHost.collectAsStateWithLifecycle()
+    val decoyOptions = viewModel.decoyOptions
 
     val intervals = listOf(1, 5, 10, 30, 60)
 
@@ -1222,12 +1224,14 @@ fun RotatorTab(viewModel: VpnViewModel) {
                             fontFamily = FontFamily.Monospace
                         )
                         Spacer(modifier = Modifier.height(4.dp))
+                        
+                        // First Row of Decoys
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            val decoyOptions = listOf("www.google.com", "cdn.cloudflare.com", "www.microsoft.com", "github.com")
-                            decoyOptions.forEach { option ->
+                            val row1 = decoyOptions.take(4)
+                            row1.forEach { option ->
                                 val isSelected = decoyHost == option
                                 Box(
                                     modifier = Modifier
@@ -1243,7 +1247,11 @@ fun RotatorTab(viewModel: VpnViewModel) {
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = option.substringBefore(".com").removePrefix("www.").removePrefix("cdn."),
+                                        text = option.substringBefore(".com")
+                                            .substringBefore(".io")
+                                            .substringBefore(".org")
+                                            .removePrefix("www.")
+                                            .removePrefix("cdn."),
                                         color = if (isSelected) CyberCyan else CyberGray,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -1254,6 +1262,84 @@ fun RotatorTab(viewModel: VpnViewModel) {
                                     )
                                 }
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Second Row of Decoys
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val row2 = decoyOptions.drop(4)
+                            row2.forEach { option ->
+                                val isSelected = decoyHost == option
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (isSelected) CyberCyan else CyberGray.copy(alpha = 0.3f),
+                                            shape = RoundedCornerShape(4.dp)
+                                        )
+                                        .background(if (isSelected) CyberCyan.copy(alpha = 0.15f) else Color.Transparent)
+                                        .clickable { viewModel.decoyHost.value = option }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = option.substringBefore(".com")
+                                            .substringBefore(".io")
+                                            .substringBefore(".org")
+                                            .removePrefix("www.")
+                                            .removePrefix("cdn."),
+                                        color = if (isSelected) CyberCyan else CyberGray,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = CyberGray.copy(alpha = 0.1f), thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Decoy Auto-Shuffle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "DECOY AUTO-SHUFFLE",
+                                    color = CyberWhite,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Text(
+                                    "Automatically rotates the fronting decoy target during session shuffles or handshakes to bypass behavior and pattern-matching signature firewalls.",
+                                    color = CyberGray,
+                                    fontSize = 10.sp
+                                )
+                            }
+                            Switch(
+                                checked = isDecoyShuffleEnabled,
+                                onCheckedChange = { viewModel.toggleDecoyShuffle() },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = CyberBlack,
+                                    checkedTrackColor = CyberCyan,
+                                    uncheckedThumbColor = CyberGray,
+                                    uncheckedTrackColor = CyberCard
+                                ),
+                                modifier = Modifier.testTag("toggle_decoy_shuffle")
+                            )
                         }
                     }
                 }

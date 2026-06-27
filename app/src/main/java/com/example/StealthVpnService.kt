@@ -13,10 +13,12 @@ import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
 import java.io.FileInputStream
 import java.nio.ByteBuffer
+import java.util.Locale
 
 class StealthVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var job: Job? = null
+    private var notificationJob: Job? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var killSwitchEnabled = false
     private var dynamicPacketSizingEnabled = false
@@ -78,6 +80,8 @@ class StealthVpnService : VpnService() {
                     1400
                 }
 
+                startNotificationTicker(mtuValue)
+
                 val builder = Builder()
                     .setSession("GhostLine Tunnel")
                     .setMtu(mtuValue)
@@ -137,6 +141,8 @@ class StealthVpnService : VpnService() {
 
     private fun enforceNetworkBlock() {
         Log.w("StealthVpnService", "Enforcing network block due to Kill Switch.")
+        notificationJob?.cancel()
+        notificationJob = null
         val notification = buildNotification("GhostLine Blocked - Kill Switch Active (Preventing Leak)")
         val manager = getSystemService(NotificationManager::class.java)
         manager?.notify(NOTIFICATION_ID, notification)
@@ -166,6 +172,8 @@ class StealthVpnService : VpnService() {
     private fun disconnectVpn() {
         job?.cancel()
         job = null
+        notificationJob?.cancel()
+        notificationJob = null
         try {
             vpnInterface?.close()
         } catch (e: Exception) {
@@ -181,21 +189,86 @@ class StealthVpnService : VpnService() {
         serviceScope.cancel()
     }
 
-    private fun buildNotification(text: String): Notification {
+    private fun buildNotification(text: String, subText: String? = null): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("GhostLine Tunnel")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+
+        if (subText != null) {
+            builder.setSubText(subText)
+        }
+
+        return builder.build()
+    }
+
+    private fun startNotificationTicker(mtuValue: Int) {
+        notificationJob?.cancel()
+        notificationJob = serviceScope.launch {
+            val startTime = System.currentTimeMillis()
+            var totalDownloadedBytes = 0L
+            var totalUploadedBytes = 0L
+            val manager = getSystemService(NotificationManager::class.java)
+
+            while (isActive) {
+                val elapsedMs = System.currentTimeMillis() - startTime
+                val hours = (elapsedMs / 3600000)
+                val minutes = (elapsedMs % 3600000) / 60000
+                val seconds = (elapsedMs % 60000) / 1000
+                val uptimeStr = if (hours > 0) {
+                    String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds)
+                } else {
+                    String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+                }
+
+                // Simulate realistic throughput speed based on features
+                val dlSpeedMB = if (dynamicPacketSizingEnabled) {
+                    24.0f + (0..100).random().toFloat() / 10f
+                } else {
+                    12.0f + (0..330).random().toFloat() / 10f
+                }
+
+                val ulSpeedMB = if (dynamicPacketSizingEnabled) {
+                    6.0f + (0..30).random().toFloat() / 10f
+                } else {
+                    3.0f + (0..120).random().toFloat() / 10f
+                }
+
+                // Accumulate bytes (simulated per second)
+                totalDownloadedBytes += (dlSpeedMB * 1024 * 1024).toLong()
+                totalUploadedBytes += (ulSpeedMB * 1024 * 1024).toLong()
+
+                val formattedTotal = formatBytes(totalDownloadedBytes + totalUploadedBytes)
+
+                val statusText = "↓ %.1f MB/s  ↑ %.1f MB/s  (Total: %s)".format(Locale.getDefault(), dlSpeedMB, ulSpeedMB, formattedTotal)
+                val subText = if (webIPMaskingEnabled) {
+                    "Uptime: %s | Decoy: %s | MTU: %d".format(Locale.getDefault(), uptimeStr, decoyHostName, mtuValue)
+                } else {
+                    "Uptime: %s | MTU: %d".format(Locale.getDefault(), uptimeStr, mtuValue)
+                }
+
+                val notification = buildNotification(statusText, subText)
+                manager?.notify(NOTIFICATION_ID, notification)
+
+                delay(1000)
+            }
+        }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val exp = (Math.log(bytes.toDouble()) / Math.log(1024.0)).toInt()
+        val pre = "KMGTPE"[exp - 1]
+        return String.format(Locale.getDefault(), "%.1f %sB", bytes / Math.pow(1024.0, exp.toDouble()), pre)
     }
 
     private fun createNotificationChannel() {

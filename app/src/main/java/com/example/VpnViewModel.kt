@@ -75,7 +75,21 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
     private val _isWebIPMaskingEnabled = MutableStateFlow(false)
     val isWebIPMaskingEnabled: StateFlow<Boolean> = _isWebIPMaskingEnabled.asStateFlow()
 
+    private val _isDecoyShuffleEnabled = MutableStateFlow(true)
+    val isDecoyShuffleEnabled: StateFlow<Boolean> = _isDecoyShuffleEnabled.asStateFlow()
+
     val decoyHost = MutableStateFlow("www.google.com")
+
+    val decoyOptions = listOf(
+        "www.google.com",
+        "cdn.cloudflare.com",
+        "www.microsoft.com",
+        "github.com",
+        "itch.io",
+        "nexus.com",
+        "tendoku.com",
+        "apkvision.org"
+    )
 
     private val _terminalLogs = MutableStateFlow<List<String>>(emptyList())
     val terminalLogs: StateFlow<List<String>> = _terminalLogs.asStateFlow()
@@ -188,12 +202,21 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
         addTerminalLog("HANDSHAKE: Initiating WireGuard Noise_IKpsk2_25519 handshake...")
         if (_isWebIPMaskingEnabled.value) {
+            if (_isDecoyShuffleEnabled.value) {
+                val nextDecoy = decoyOptions.random()
+                decoyHost.value = nextDecoy
+                addTerminalLog("FRONTING: Decoy target shuffled dynamically on connection.")
+            }
             val decoy = decoyHost.value
             val decoyIp = when (decoy) {
                 "www.google.com" -> "142.250.190.4"
                 "cdn.cloudflare.com" -> "104.16.124.96"
                 "www.microsoft.com" -> "23.211.233.153"
                 "github.com" -> "140.82.121.4"
+                "itch.io" -> "104.20.224.40"
+                "nexus.com" -> "104.18.23.10"
+                "tendoku.com" -> "172.67.140.231"
+                "apkvision.org" -> "172.67.218.45"
                 else -> "104.244.42.1"
             }
             addTerminalLog("FRONTING: SNI / TCP Host header masquerade active.")
@@ -380,6 +403,15 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleDecoyShuffle() {
+        _isDecoyShuffleEnabled.value = !_isDecoyShuffleEnabled.value
+        if (_isDecoyShuffleEnabled.value) {
+            addTerminalLog("FRONTING: Dynamic decoy shuffling active. Decoy host will rotate automatically to bypass behavioral pattern matching.")
+        } else {
+            addTerminalLog("FRONTING: Dynamic decoy shuffling disabled. Sticking to static decoy host.")
+        }
+    }
+
     private fun startIpRotation() {
         rotationJob?.cancel()
         rotationJob = viewModelScope.launch {
@@ -410,6 +442,24 @@ class VpnViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun rotateIp() {
         _connectionState.value = ConnectionState.SHUFFLING
+
+        // Dynamic Fronting Decoy Shuffle
+        if (_isWebIPMaskingEnabled.value && _isDecoyShuffleEnabled.value) {
+            val nextDecoy = decoyOptions.random()
+            decoyHost.value = nextDecoy
+            val decoyIp = when (nextDecoy) {
+                "www.google.com" -> "142.250.190.4"
+                "cdn.cloudflare.com" -> "104.16.124.96"
+                "www.microsoft.com" -> "23.211.233.153"
+                "github.com" -> "140.82.121.4"
+                "itch.io" -> "104.20.224.40"
+                "nexus.com" -> "104.18.23.10"
+                "tendoku.com" -> "172.67.140.231"
+                "apkvision.org" -> "172.67.218.45"
+                else -> "104.244.42.1"
+            }
+            addTerminalLog("FRONTING: Decoy target shuffled dynamically. New fronting host -> $nextDecoy [$decoyIp] (Faking standard HTTPS traffic)")
+        }
         
         // Simulating payload padding obfuscation
         if (_isPayloadPaddingEnabled.value) {
